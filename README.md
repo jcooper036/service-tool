@@ -2,13 +2,18 @@
 
 `ser` keeps track of the servers you run on localhost. APIs, web apps, dev servers, notebooks: anything you serve on a local port.
 
-It replaces a tmux pane per server. Run a service through `ser` and it gets a free port, a log, and a record of where and from which branch it was started. `ser status` is the lookup for what is running, where, and at which link.
+Run a service through `ser` and it gets a free port, a log, and a record of where and from which branch it was started. `ser status` is the lookup for what is running, where, and at which link.
 
 A companion tool, [tunnel-tool](https://github.com/jcooper036/tunnel-tool), does the same job for connections to services that are not on your machine, such as Cloud SQL proxies, `kubectl port-forward`, and ssh tunnels. `ser` is for what you host, and `tun` is for what you connect to.
 
 ## Install
 
-Clone the repository, then run `cargo install --path .` from its root. This builds the binary and puts `ser` in `~/.cargo/bin`.
+Clone the repository,  from its root. 
+```
+cargo install --path .
+```
+
+This builds the binary and puts `ser` in `~/.cargo/bin`.
 
 If you have not used cargo before, add `~/.cargo/bin` to your `PATH` in your shell profile.
 
@@ -48,17 +53,9 @@ Each run is a session in `~/.ser/ser.db`. It records the command, the ports, the
 
 `ser` tries the port you ask for, or 3000 if you give none. If it is taken, it moves up until it finds a free one. A port counts as free only if nothing is listening on it and it can be bound on every loopback and wildcard address. Starting services at the same time never hands out the same port twice.
 
-Anything that needs a service's port asks `ser`. Do not remember a port from an earlier run.
+### Commands offer but do not force a port
 
-### Commands cannot hardcode the port
-
-A service has to take its port from a `{port}` placeholder in the command or from the `PORT` environment variable, which `ser` always sets. A server with a hardcoded port cannot be moved, so `ser` does not support it. If a service never opens its assigned port, `ser` says so and points at its log.
-
-### A service is a name in a directory
-
-The name defaults to the directory name. Running the same name from the same directory while it is up returns the existing session instead of starting a duplicate. To start another instance, give it another name. The same name in two directories is two services, which is how the same app can run from two worktrees at once.
-
-A name that matches services in several directories is resolved by the directory you are in. If that does not pick exactly one, `ser` lists the matches and you use the session id from `ser status`.
+Commands envoked with a port are not certain to get that port. `ser` starts looking on that port, but hands the first free port back.
 
 ### Foreground by default, detached on request
 
@@ -104,4 +101,3 @@ When something is wrong, run `ser show <name>` for a one-call diagnosis, then `s
 
 Version: 1.0
 Date: 2026-10-02
-END OF DOCUMENT
