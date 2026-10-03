@@ -44,6 +44,8 @@ pub enum Command {
     Show(ShowArgs),
     #[command(about = "Print the port of a running service")]
     Port(TargetArgs),
+    #[command(about = "Change a running service: set its health URL, add tags")]
+    Set(SetArgs),
     #[command(about = "Delete stopped sessions and their logs")]
     Prune,
 }
@@ -156,4 +158,18 @@ pub struct ShowArgs {
     pub lines: usize,
     #[arg(long, help = "Print one JSON object")]
     pub json: bool,
+}
+
+#[derive(Args)]
+pub struct SetArgs {
+    #[arg(help = "Name or session id")]
+    pub target: String,
+    #[arg(long, help = "Health URL containing {port}; a 2xx response is healthy")]
+    pub health: Option<String>,
+    #[arg(
+        short,
+        long = "tag",
+        help = "Tag to add (repeatable or comma separated)"
+    )]
+    pub tags: Vec<String>,
 }

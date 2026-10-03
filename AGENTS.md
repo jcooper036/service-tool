@@ -62,6 +62,10 @@ A service must take its port either from a `{port}` placeholder in the command o
 - `check <name, id>` reports the health check. Exit 0 healthy, 1 not
 - `show <name, id>` one-call diagnosis: session, directory, branch, live health check, log tail. `--json`
 - `port <name>` prints only the running port. Non-zero exit if not running
+- `set <name, id>` changes a running service
+    - `--health` sets the health URL, replacing any existing one
+    - `-t` adds tags
+    - both carry through `restart` and `heal`
 - `prune` deletes stopped sessions and their logs
 
 ### Name scope
@@ -109,6 +113,6 @@ Before signalling, `ser` compares the process start time to the one recorded in 
 - `.agents/skills/service-tool/` holds the skill that tells agents to use `ser` instead of backgrounding servers with `&`
 - when something is wrong: `ser show <name>`, then `ser log <name>`
 
-Version: 1.1
+Version: 1.2
 Date: 2026-10-02
 END OF DOCUMENT

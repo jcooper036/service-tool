@@ -39,4 +39,6 @@ The same name in two directories is two services. Run from the service's directo
 
 `ser port <name>` prints only the port of a running service. `ser run -d` with the same name in the same directory returns the existing session instead of starting a duplicate, so it is safe to call before every use.
 
+`ser set <name> --health <url>` adds a health check to a service that is already running, and `-t` adds tags. Use it instead of stopping and rerunning.
+
 `ser status -q` exits 0 only when something is running and all of it is up. `ser heal` restarts services that died.

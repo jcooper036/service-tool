@@ -322,3 +322,49 @@ fn concurrent_runs_never_claim_the_same_port() {
             .all(|s| s["state"] == "up")
     );
 }
+
+#[test]
+fn set_adds_a_health_check_and_tags_to_a_running_service() {
+    let env = Env::new();
+    let port = free_port().to_string();
+    env.ok(&["run", "-d", "-n", "web", "-t", "one", SERVER, &port]);
+    assert!(!env.ser(&["check", "web"]).status.success());
+
+    env.ok(&[
+        "set",
+        "web",
+        "--health",
+        "http://127.0.0.1:{port}/",
+        "-t",
+        "two,one",
+        "-t",
+        "three",
+    ]);
+    assert!(env.ok(&["check", "web"]).starts_with("healthy"));
+    assert_eq!(
+        services(&env)[0]["tags"],
+        serde_json::json!(["one", "two", "three"])
+    );
+
+    // The health check follows the service through a restart.
+    env.ok(&["restart", "web"]);
+    assert!(env.ok(&["check", "web"]).starts_with("healthy"));
+    assert_eq!(
+        services(&env)[0]["tags"],
+        serde_json::json!(["one", "two", "three"])
+    );
+}
+
+#[test]
+fn set_rejects_bad_input_and_stopped_services() {
+    let env = Env::new();
+    env.ok(&["run", "-d", "-n", "web", SERVER, &free_port().to_string()]);
+    assert!(!env.ser(&["set", "web"]).status.success());
+    assert!(
+        !env.ser(&["set", "web", "--health", "ftp://nope"])
+            .status
+            .success()
+    );
+    env.ok(&["stop", "web"]);
+    assert!(!env.ser(&["set", "web", "-t", "x"]).status.success());
+}

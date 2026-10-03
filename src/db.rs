@@ -189,6 +189,22 @@ pub fn mark_stopped(conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn set_health_url(conn: &Connection, id: &str, url: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE sessions SET health_url = ?1 WHERE id = ?2",
+        params![url, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_tags(conn: &Connection, id: &str, tags: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE sessions SET tags = ?1 WHERE id = ?2",
+        params![tags, id],
+    )?;
+    Ok(())
+}
+
 pub fn delete_session(conn: &Connection, id: &str) -> Result<()> {
     conn.execute("DELETE FROM sessions WHERE id = ?1", [id])?;
     Ok(())

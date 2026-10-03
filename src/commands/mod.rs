@@ -5,6 +5,7 @@ pub mod port;
 pub mod prune;
 pub mod restart;
 pub mod run;
+pub mod set;
 pub mod show;
 pub mod status;
 pub mod stop;
@@ -63,6 +64,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Check(args) => check::run(&ctx, args),
         Command::Show(args) => show::run(&ctx, args),
         Command::Port(args) => port::run(&ctx, args),
+        Command::Set(args) => set::run(&ctx, args),
         Command::Prune => prune::run(&ctx),
     }
 }

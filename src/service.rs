@@ -14,6 +14,23 @@ use crate::{git, logs, ports, process};
 
 pub const PORT_PLACEHOLDER: &str = "{port}";
 
+pub fn validate_health_url(url: &str) -> Result<()> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        bail!("health URL must start with http:// or https://");
+    }
+    Ok(())
+}
+
+/// Tags may be repeated or comma separated.
+pub fn parse_tags(raw: &[String]) -> Vec<String> {
+    raw.iter()
+        .flat_map(|t| t.split(','))
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Detached,
@@ -45,10 +62,8 @@ pub fn start(ctx: &mut Ctx, spec: &StartSpec) -> Result<Outcome> {
     if spec.command.trim().is_empty() {
         bail!("empty command");
     }
-    if let Some(url) = &spec.health_url
-        && !(url.starts_with("http://") || url.starts_with("https://"))
-    {
-        bail!("health URL must start with http:// or https://");
+    if let Some(url) = &spec.health_url {
+        validate_health_url(url)?;
     }
     let cwd = spec.cwd.to_string_lossy().into_owned();
 

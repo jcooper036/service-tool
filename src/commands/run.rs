@@ -140,14 +140,7 @@ pub fn run(ctx: &mut Ctx, args: RunArgs) -> Result<()> {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "service".to_string()),
     };
-    let tags = args
-        .tags
-        .iter()
-        .flat_map(|t| t.split(','))
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .map(str::to_string)
-        .collect();
+    let tags = service::parse_tags(&args.tags);
     let mode = if args.detached {
         Mode::Detached
     } else {
@@ -167,7 +160,12 @@ pub fn run(ctx: &mut Ctx, args: RunArgs) -> Result<()> {
 
     match service::start(ctx, &spec)? {
         Outcome::Existing(session) => {
-            announce("already running:", &session);
+            eprintln!(
+                "service with name \"{}\" is already running on http://localhost:{} (session {})\nTo start another instance, change the name",
+                session.name,
+                session.port,
+                session.short_id()
+            );
             report(&args, &session)
         }
         Outcome::Started(session, child) if mode == Mode::Foreground => {

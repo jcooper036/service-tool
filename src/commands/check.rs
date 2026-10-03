@@ -9,7 +9,7 @@ pub fn run(ctx: &Ctx, args: TargetArgs) -> Result<()> {
     let session = target::resolve_one(&ctx.conn, &args.target, &current_dir()?, true)?;
     let Some(url) = health::health_url(&session) else {
         bail!(
-            "'{}' has no health URL (set one with `ser run --health`)",
+            "'{}' has no health URL (set one with `ser set {0} --health <url>`)",
             session.name
         );
     };
