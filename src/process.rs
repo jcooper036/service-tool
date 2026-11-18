@@ -50,17 +50,26 @@ pub fn is_alive(pid: u32, started: &str) -> bool {
     }
 }
 
-fn shell(command: &str, cwd: &Path, port: u16) -> Command {
+/// A worker gets no PORT, and does not inherit one from the environment `ser` was started in.
+fn shell(command: &str, cwd: &Path, port: Option<u16>) -> Command {
     let mut cmd = Command::new("sh");
     cmd.arg("-c")
         .arg(command)
         .current_dir(cwd)
-        .env("PORT", port.to_string())
         .stdin(Stdio::null());
+    match port {
+        Some(port) => cmd.env("PORT", port.to_string()),
+        None => cmd.env_remove("PORT"),
+    };
     cmd
 }
 
-pub fn spawn_detached(command: &str, cwd: &Path, port: u16, log_path: &Path) -> Result<Child> {
+pub fn spawn_detached(
+    command: &str,
+    cwd: &Path,
+    port: Option<u16>,
+    log_path: &Path,
+) -> Result<Child> {
     let log = OpenOptions::new()
         .create(true)
         .append(true)
@@ -80,7 +89,7 @@ pub fn spawn_detached(command: &str, cwd: &Path, port: u16, log_path: &Path) -> 
 }
 
 /// Own process group so the terminal's Ctrl-C reaches `ser`, which forwards it, instead of the child directly.
-pub fn spawn_foreground(command: &str, cwd: &Path, port: u16) -> Result<Child> {
+pub fn spawn_foreground(command: &str, cwd: &Path, port: Option<u16>) -> Result<Child> {
     shell(command, cwd, port)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -119,6 +128,20 @@ pub fn wait_for_port(child: &mut Child, port: u16, timeout: Duration) -> bool {
             return true;
         }
         if matches!(child.try_wait(), Ok(Some(_))) || Instant::now() >= deadline {
+            return false;
+        }
+        sleep(POLL);
+    }
+}
+
+/// True if the child exits within `timeout`. A worker has no port to prove it started, so an immediate crash is caught this way.
+pub fn exits_within(child: &mut Child, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if !matches!(child.try_wait(), Ok(None)) {
+            return true;
+        }
+        if Instant::now() >= deadline {
             return false;
         }
         sleep(POLL);

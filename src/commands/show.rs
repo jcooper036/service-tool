@@ -34,7 +34,10 @@ pub fn run(ctx: &Ctx, args: ShowArgs) -> Result<()> {
     println!("name: {}", s.name);
     println!("session: {}", s.id);
     println!("state: {}", s.state);
-    println!("url: {}", s.url);
+    match &s.url {
+        Some(url) => println!("url: {url}"),
+        None => println!("url: none (worker, no port)"),
+    }
     println!("process_id: {}", s.process_id);
     println!("directory: {}", s.cwd);
     match (&s.git_branch, &s.git_root) {

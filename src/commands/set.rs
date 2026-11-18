@@ -15,6 +15,9 @@ pub fn run(ctx: &Ctx, args: SetArgs) -> Result<()> {
     }
     let session = target::resolve_one(&ctx.conn, &args.target, &current_dir()?, true)?;
     if let Some(url) = &args.health {
+        if session.is_worker() {
+            service::reject_port_placeholder("health URL", url)?;
+        }
         db::set_health_url(&ctx.conn, &session.id, url)?;
     }
     if !new_tags.is_empty() {

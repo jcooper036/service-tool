@@ -42,3 +42,7 @@ The same name in two directories is two services. Run from the service's directo
 `ser set <name> --health <url>` adds a health check to a service that is already running, and `-t` adds tags. Use it instead of stopping and rerunning.
 
 `ser status -q` exits 0 only when something is running and all of it is up. `ser heal` restarts services that died.
+
+## Workers
+
+A process that listens on nothing (a queue consumer, a poller) is run with `ser run -d --no-port -n <name> <command>`. It gets no port and no `PORT` variable, and `{port}` in the command is an error. `ser status --json` shows `"port": null` and `"url": null` for it, and its `state` is `up` while the process is alive and its optional `--health` check (an absolute URL, no `{port}`) passes, `unhealthy` if the check fails, and `dead` once the process is gone. `restart`, `heal`, `stop`, and `log` work the same.

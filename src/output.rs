@@ -9,8 +9,10 @@ pub struct SessionView {
     pub name: String,
     pub tags: Vec<String>,
     pub state: String,
-    pub port: u16,
-    pub url: String,
+    /// null for a worker
+    pub port: Option<u16>,
+    /// null for a worker
+    pub url: Option<String>,
     pub process_id: u32,
     pub cwd: String,
     pub git_branch: Option<String>,
@@ -30,6 +32,14 @@ pub fn url(port: u16) -> String {
     format!("http://localhost:{port}")
 }
 
+/// Where a session can be reached, for messages: its URL, or its pid when it is a worker with no port.
+pub fn placement(session: &Session) -> String {
+    match session.port {
+        Some(port) => format!("on http://localhost:{port}"),
+        None => format!("as a worker (pid {})", session.process_id),
+    }
+}
+
 impl SessionView {
     pub fn new(session: &Session, state: &str) -> Self {
         Self {
@@ -38,7 +48,7 @@ impl SessionView {
             tags: session.tag_list(),
             state: state.to_string(),
             port: session.port,
-            url: url(session.port),
+            url: session.port.map(url),
             process_id: session.process_id,
             cwd: session.cwd.clone(),
             git_branch: session.git_branch.clone(),

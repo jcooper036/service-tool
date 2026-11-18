@@ -33,6 +33,10 @@ A service must take its port either from a `{port}` placeholder in the command o
 
 `up`: the process is alive and the port accepts connections. `unhealthy`: up, but the health URL fails. `unreachable`: alive, port closed. `dead`: the process is gone.
 
+### Workers have no port
+
+A worker is a session with a null `port` and `requested_port`. Its liveness is the process alone: `up`, `unhealthy` (only if it has a health URL, which must be absolute), or `dead`. It is never `unreachable`. `restart` and `heal` keep a worker a worker, and `ser port` fails for one.
+
 ## CMD interface
 - `ser` (prefix for the tool)
     - running `ser` is the same as running `ser --help`
@@ -48,8 +52,9 @@ A service must take its port either from a `{port}` placeholder in the command o
     - `--health` http(s) URL containing `{port}`. A 2xx response is healthy
     - `--wait` seconds to wait for the port to open
     - `--json` prints the session instead of the port
+    - `--no-port` runs a worker: a process that listens on nothing (a queue consumer, a poller). No port is picked, `{port}` in the command or health URL is rejected, `PORT` is not set, and `--port`/`--wait` are rejected. JSON `port` and `url` are null. Its detached output is the session id
     - foreground streams the service's output and logs it. Detached prints only the port to stdout
-    - running the same name from the same directory while it is up returns the existing session instead of starting a duplicate
+    - running the same name from the same directory while it is up returns the existing session instead of starting a duplicate. The same name as a worker and as a service with a port is an error
 - `stop`
     - `-a, --all` stops all services
     - targets by name, tag, id, or process id
