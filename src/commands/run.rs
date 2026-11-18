@@ -12,7 +12,7 @@ use crate::cli::RunArgs;
 use crate::commands::{Silent, current_dir, view};
 use crate::ctx::Ctx;
 use crate::db::{self, Session};
-use crate::output::print_json;
+use crate::output::{placement, print_json};
 use crate::service::{self, Mode, Outcome, StartSpec};
 use crate::{ports, process};
 
@@ -37,19 +37,23 @@ fn install_signal_handlers() {
     }
 }
 
+/// A server's port is the data. A worker has none, so its session id is what a script needs to manage it.
 fn report(args: &RunArgs, session: &Session) -> Result<()> {
     if args.json {
         return print_json(&view(session));
     }
-    println!("{}", session.port);
+    match session.port {
+        Some(port) => println!("{port}"),
+        None => println!("{}", session.id),
+    }
     Ok(())
 }
 
 fn announce(verb: &str, session: &Session) {
     eprintln!(
-        "{verb} {} on http://localhost:{} (session {})",
+        "{verb} {} {} (session {})",
         session.name,
-        session.port,
+        placement(session),
         session.short_id()
     );
 }
@@ -84,7 +88,8 @@ fn foreground(ctx: &Ctx, session: &Session, mut child: Child, wait: Duration) ->
     install_signal_handlers();
 
     let began = Instant::now();
-    let (mut listening, mut warned) = (false, false);
+    // The port still to be seen listening. A worker has none, so it is never warned about.
+    let mut unseen_port = session.port;
     let mut stopped_by_us = false;
     let status = loop {
         if INTERRUPTED.load(Ordering::SeqCst) {
@@ -95,14 +100,13 @@ fn foreground(ctx: &Ctx, session: &Session, mut child: Child, wait: Duration) ->
         if let Some(status) = child.try_wait()? {
             break status;
         }
-        if !listening && !warned {
-            if ports::accepts_connections(session.port) {
-                listening = true;
+        if let Some(port) = unseen_port {
+            if ports::accepts_connections(port) {
+                unseen_port = None;
             } else if began.elapsed() > wait {
-                warned = true;
+                unseen_port = None;
                 eprintln!(
-                    "warning: nothing is listening on port {} yet. The command must use {{port}} or $PORT",
-                    session.port
+                    "warning: nothing is listening on port {port} yet. The command must use {{port}} or $PORT"
                 );
             }
         }
@@ -128,10 +132,14 @@ pub fn run(ctx: &mut Ctx, args: RunArgs) -> Result<()> {
         (Some(c), None) | (None, Some(c)) => c.clone(),
         _ => bail!("give the command to run, as the first argument or with -c"),
     };
-    let requested = args.port.or(args.port_flag).unwrap_or(DEFAULT_PORT);
-    if requested == 0 {
-        bail!("port must be 1-65535");
-    }
+    let requested = if args.no_port {
+        None
+    } else {
+        match args.port.or(args.port_flag).unwrap_or(DEFAULT_PORT) {
+            0 => bail!("port must be 1-65535"),
+            port => Some(port),
+        }
+    };
     let cwd = current_dir()?;
     let name = match &args.name {
         Some(name) => name.clone(),
@@ -161,9 +169,9 @@ pub fn run(ctx: &mut Ctx, args: RunArgs) -> Result<()> {
     match service::start(ctx, &spec)? {
         Outcome::Existing(session) => {
             eprintln!(
-                "service with name \"{}\" is already running on http://localhost:{} (session {})\nTo start another instance, change the name",
+                "service with name \"{}\" is already running {} (session {})\nTo start another instance, change the name",
                 session.name,
-                session.port,
+                placement(&session),
                 session.short_id()
             );
             report(&args, &session)
@@ -172,10 +180,12 @@ pub fn run(ctx: &mut Ctx, args: RunArgs) -> Result<()> {
             foreground(ctx, &session, child, wait)
         }
         Outcome::Started(session, mut child) => {
-            if !service::await_up(ctx, &session, &mut child, wait)? {
+            if !service::await_up(ctx, &session, &mut child, wait)?
+                && let Some(port) = session.port
+            {
                 eprintln!(
-                    "warning: nothing is listening on port {} after {}s. The command must use {{port}} or $PORT. See `ser show {}`",
-                    session.port, args.wait, session.name
+                    "warning: nothing is listening on port {port} after {}s. The command must use {{port}} or $PORT. See `ser show {}`",
+                    args.wait, session.name
                 );
             }
             announce("started", &session);

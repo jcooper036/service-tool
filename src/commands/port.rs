@@ -11,6 +11,9 @@ pub fn run(ctx: &Ctx, args: TargetArgs) -> Result<()> {
         eprintln!("'{}' is not running", session.name);
         bail!(Silent);
     }
-    println!("{}", session.port);
+    let Some(port) = session.port else {
+        bail!("'{}' is a worker and has no port", session.name);
+    };
+    println!("{port}");
     Ok(())
 }

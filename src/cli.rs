@@ -55,7 +55,7 @@ pub struct RunArgs {
     #[arg(
         value_name = "COMMAND",
         conflicts_with = "command_flag",
-        help = "Command to start the server. Use {port}, or read the PORT environment variable"
+        help = "Command to start the server. Use {port}, or read the PORT environment variable (not for --no-port)"
     )]
     pub command: Option<String>,
     #[arg(
@@ -79,7 +79,10 @@ pub struct RunArgs {
     pub tags: Vec<String>,
     #[arg(short, long, help = "Name (default: the directory name)")]
     pub name: Option<String>,
-    #[arg(long, help = "Health URL containing {port}; a 2xx response is healthy")]
+    #[arg(
+        long,
+        help = "Health URL containing {port} (absolute URL for a worker); a 2xx response is healthy"
+    )]
     pub health: Option<String>,
     #[arg(
         long,
@@ -87,7 +90,16 @@ pub struct RunArgs {
         help = "Seconds to wait for the port to open"
     )]
     pub wait: u64,
-    #[arg(long, help = "Print the session as JSON instead of just the port")]
+    #[arg(
+        long,
+        conflicts_with_all = ["port", "port_flag", "wait"],
+        help = "Run a worker that listens on nothing: no port is picked, {port} is rejected, PORT is not set, and liveness is the process"
+    )]
+    pub no_port: bool,
+    #[arg(
+        long,
+        help = "Print the session as JSON (a worker has a null port and url) instead of just the port"
+    )]
     pub json: bool,
 }
 

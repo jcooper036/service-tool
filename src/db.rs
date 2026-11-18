@@ -5,29 +5,64 @@ use anyhow::Result;
 use chrono::Utc;
 use rusqlite::{Connection, Row, TransactionBehavior, params};
 
-const MIGRATIONS: &[(&str, &str)] = &[(
-    "26100220_create_sessions",
-    "CREATE TABLE sessions (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        tags TEXT NOT NULL,
-        cwd TEXT NOT NULL,
-        command TEXT NOT NULL,
-        health_url TEXT,
-        requested_port INTEGER NOT NULL,
-        port INTEGER NOT NULL,
-        process_id INTEGER NOT NULL,
-        process_started TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        stopped_at TEXT,
-        log_path TEXT NOT NULL,
-        git_branch TEXT,
-        git_root TEXT,
-        git_worktree INTEGER NOT NULL,
-        heal_count INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE INDEX sessions_active_idx ON sessions (stopped_at);",
-)];
+const MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "26100220_create_sessions",
+        "CREATE TABLE sessions (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            tags TEXT NOT NULL,
+            cwd TEXT NOT NULL,
+            command TEXT NOT NULL,
+            health_url TEXT,
+            requested_port INTEGER NOT NULL,
+            port INTEGER NOT NULL,
+            process_id INTEGER NOT NULL,
+            process_started TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            stopped_at TEXT,
+            log_path TEXT NOT NULL,
+            git_branch TEXT,
+            git_root TEXT,
+            git_worktree INTEGER NOT NULL,
+            heal_count INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX sessions_active_idx ON sessions (stopped_at);",
+    ),
+    (
+        "26111815_workers_have_no_port",
+        // SQLite cannot drop NOT NULL in place, so the table is rebuilt. Existing rows are copied unchanged.
+        "CREATE TABLE sessions_new (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            tags TEXT NOT NULL,
+            cwd TEXT NOT NULL,
+            command TEXT NOT NULL,
+            health_url TEXT,
+            requested_port INTEGER,
+            port INTEGER,
+            process_id INTEGER NOT NULL,
+            process_started TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            stopped_at TEXT,
+            log_path TEXT NOT NULL,
+            git_branch TEXT,
+            git_root TEXT,
+            git_worktree INTEGER NOT NULL,
+            heal_count INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT INTO sessions_new (id, name, tags, cwd, command, health_url, requested_port, port, \
+            process_id, process_started, created_at, stopped_at, log_path, git_branch, git_root, \
+            git_worktree, heal_count)
+        SELECT id, name, tags, cwd, command, health_url, requested_port, port, \
+            process_id, process_started, created_at, stopped_at, log_path, git_branch, git_root, \
+            git_worktree, heal_count
+        FROM sessions;
+        DROP TABLE sessions;
+        ALTER TABLE sessions_new RENAME TO sessions;
+        CREATE INDEX sessions_active_idx ON sessions (stopped_at);",
+    ),
+];
 
 const COLUMNS: &str = "id, name, tags, cwd, command, health_url, requested_port, port, \
     process_id, process_started, created_at, stopped_at, log_path, git_branch, git_root, \
@@ -41,8 +76,10 @@ pub struct Session {
     pub cwd: String,
     pub command: String,
     pub health_url: Option<String>,
-    pub requested_port: u16,
-    pub port: u16,
+    /// None for a worker, which has no port.
+    pub requested_port: Option<u16>,
+    /// None for a worker, which has no port.
+    pub port: Option<u16>,
     pub process_id: u32,
     pub process_started: String,
     pub created_at: String,
@@ -96,6 +133,11 @@ impl Session {
 
     pub fn is_active(&self) -> bool {
         self.stopped_at.is_none()
+    }
+
+    /// A worker is a process with no listening port, so it has no port, URL, or reachability.
+    pub fn is_worker(&self) -> bool {
+        self.port.is_none()
     }
 }
 

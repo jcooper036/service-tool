@@ -69,6 +69,10 @@ Commands envoked with a port are not certain to get that port. `ser` starts look
 
 A health check is an http or https URL containing `{port}`. A 2xx response is healthy. Set it with `ser run --health`, or add it to a service that is already running with `ser set`, which also adds tags.
 
+### Workers listen on nothing
+
+`ser run -d --no-port -n consumer "python consume.py"` tracks a process that has no port, such as a queue consumer. `ser` does not pick or wait for a port, `{port}` in the command is an error, and `PORT` is not set for the process. Its liveness is the process itself: `up` while it is alive, `dead` once it is gone. With an optional health check, a live worker is `up` only while the check passes and `unhealthy` otherwise. A health check and must be an absolute URL with no `{port}`. In `--json` output `port` and `url` are `null`. A detached worker prints its session id instead of a port. `restart`, `heal`, `stop`, and `log` work as for any service.
+
 ### Heal only revives what died
 
 `ser heal` restarts services that were running and whose process is gone. A service you stopped is never revived. A service that has been healed three times in a row is given up on until you restart it by hand, and a service whose directory no longer exists is skipped and reported.

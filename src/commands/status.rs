@@ -55,7 +55,7 @@ fn print_services(views: &[SessionView]) {
             v.id[v.id.len().saturating_sub(8)..].to_string(),
             v.name.clone(),
             v.state.clone(),
-            v.url.clone(),
+            v.url.clone().unwrap_or_else(|| "-".to_string()),
             v.process_id.to_string(),
             branch_label(v),
             short_dir(&v.cwd),
@@ -93,7 +93,7 @@ pub fn run(ctx: &Ctx, args: StatusArgs) -> Result<()> {
     };
     let managed: HashSet<u16> = db::active_sessions(&ctx.conn)?
         .iter()
-        .map(|s| s.port)
+        .filter_map(|s| s.port)
         .collect();
     let services: Vec<SessionView> = sessions.iter().map(view).collect();
     let unmanaged: Vec<Listener> = ports::listeners()

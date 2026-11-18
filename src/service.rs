@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::Child;
@@ -12,11 +13,22 @@ use crate::ctx::Ctx;
 use crate::db::{self, Session};
 use crate::{git, logs, ports, process};
 
+/// How long a new worker must stay alive before it counts as started. It is not a port wait.
+const WORKER_STARTUP_GRACE: Duration = Duration::from_millis(300);
+
 pub const PORT_PLACEHOLDER: &str = "{port}";
 
 pub fn validate_health_url(url: &str) -> Result<()> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         bail!("health URL must start with http:// or https://");
+    }
+    Ok(())
+}
+
+/// A worker has no port, so a command or health URL that needs one can never work.
+pub fn reject_port_placeholder(what: &str, text: &str) -> Result<()> {
+    if text.contains(PORT_PLACEHOLDER) {
+        bail!("a worker has no port, so the {what} cannot contain {PORT_PLACEHOLDER}");
     }
     Ok(())
 }
@@ -43,7 +55,8 @@ pub struct StartSpec {
     pub cwd: PathBuf,
     pub command: String,
     pub health_url: Option<String>,
-    pub requested_port: u16,
+    /// The port to prefer. None starts a worker: no port is picked, {port} is rejected and PORT is not set.
+    pub requested_port: Option<u16>,
     pub heal_count: u32,
     pub mode: Mode,
 }
@@ -53,7 +66,7 @@ pub enum Outcome {
     Started(Session, Child),
 }
 
-/// Picks a port and records the session in one write transaction, so concurrent starts cannot claim the same port.
+/// Picks a port (servers only) and records the session in one write transaction, so concurrent starts cannot claim the same port.
 /// A live session with the same name and directory is returned instead of starting a duplicate.
 pub fn start(ctx: &mut Ctx, spec: &StartSpec) -> Result<Outcome> {
     if !spec.cwd.is_dir() {
@@ -64,6 +77,12 @@ pub fn start(ctx: &mut Ctx, spec: &StartSpec) -> Result<Outcome> {
     }
     if let Some(url) = &spec.health_url {
         validate_health_url(url)?;
+    }
+    if spec.requested_port.is_none() {
+        reject_port_placeholder("command", &spec.command)?;
+        if let Some(url) = &spec.health_url {
+            reject_port_placeholder("health URL", url)?;
+        }
     }
     let cwd = spec.cwd.to_string_lossy().into_owned();
 
@@ -81,6 +100,18 @@ pub fn start(ctx: &mut Ctx, spec: &StartSpec) -> Result<Outcome> {
             continue;
         }
         if s.name == spec.name && s.cwd == cwd {
+            if s.is_worker() != spec.requested_port.is_none() {
+                bail!(
+                    "'{}' is already running in {} as a {}. Stop it, or use -n to name this one",
+                    s.name,
+                    s.cwd,
+                    if s.is_worker() {
+                        "worker"
+                    } else {
+                        "service with a port"
+                    }
+                );
+            }
             if s.command == spec.command {
                 return Ok(Outcome::Existing(s));
             }
@@ -91,13 +122,19 @@ pub fn start(ctx: &mut Ctx, spec: &StartSpec) -> Result<Outcome> {
                 s.command
             );
         }
-        claimed.insert(s.port);
+        claimed.extend(s.port);
     }
 
-    let port = ports::pick(spec.requested_port, &claimed)?;
+    let port = match spec.requested_port {
+        Some(requested) => Some(ports::pick(requested, &claimed)?),
+        None => None,
+    };
     let id = Uuid::now_v7().to_string();
     let log_path = logs_dir.join(format!("{id}.log"));
-    let rendered = spec.command.replace(PORT_PLACEHOLDER, &port.to_string());
+    let rendered = match port {
+        Some(port) => Cow::Owned(spec.command.replace(PORT_PLACEHOLDER, &port.to_string())),
+        None => Cow::Borrowed(spec.command.as_str()),
+    };
     let child = match spec.mode {
         Mode::Detached => process::spawn_detached(&rendered, &spec.cwd, port, &log_path)?,
         Mode::Foreground => {
@@ -131,18 +168,28 @@ pub fn start(ctx: &mut Ctx, spec: &StartSpec) -> Result<Outcome> {
 }
 
 /// Waits for a detached session to accept connections. Errors, and marks the session stopped, if the process exits first.
-/// Returns false when it is still running but not listening yet.
+/// Returns false when it is still running but not listening yet. A worker listens on nothing, so it only has to survive a short startup grace.
 pub fn await_up(ctx: &Ctx, session: &Session, child: &mut Child, wait: Duration) -> Result<bool> {
-    if process::wait_for_port(child, session.port, wait) {
+    let Some(port) = session.port else {
+        if process::exits_within(child, WORKER_STARTUP_GRACE) {
+            db::mark_stopped(&ctx.conn, &session.id)?;
+            let tail = logs::tail(&session.log_path, 15).join("\n");
+            bail!(
+                "worker '{}' exited right after starting\n{tail}",
+                session.name
+            );
+        }
+        return Ok(true);
+    };
+    if process::wait_for_port(child, port, wait) {
         return Ok(true);
     }
     if child.try_wait()?.is_some() {
         db::mark_stopped(&ctx.conn, &session.id)?;
         let tail = logs::tail(&session.log_path, 15).join("\n");
         bail!(
-            "'{}' exited before listening on port {}\n{tail}",
-            session.name,
-            session.port
+            "'{}' exited before listening on port {port}\n{tail}",
+            session.name
         );
     }
     Ok(false)

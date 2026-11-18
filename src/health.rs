@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 use serde::Serialize;
@@ -35,17 +36,23 @@ pub fn probe(url: &str) -> HealthReport {
     }
 }
 
-pub fn health_url(session: &Session) -> Option<String> {
-    session
-        .health_url
-        .as_ref()
-        .map(|url| url.replace("{port}", &session.port.to_string()))
+/// The health URL with `{port}` filled in. A worker has no port to fill in.
+pub fn health_url(session: &Session) -> Option<Cow<'_, str>> {
+    let url = session.health_url.as_deref()?;
+    Some(match session.port {
+        Some(port) => Cow::Owned(url.replace("{port}", &port.to_string())),
+        None => Cow::Borrowed(url),
+    })
 }
 
+/// A worker is up when its process is alive (and its health check, if any, passes). It has no port to be unreachable on.
 pub fn state(session: &Session) -> Liveness {
     if !process::is_alive(session.process_id, &session.process_started) {
         Liveness::Dead
-    } else if !ports::accepts_connections(session.port) {
+    } else if session
+        .port
+        .is_some_and(|port| !ports::accepts_connections(port))
+    {
         Liveness::Unreachable
     } else if health_url(session).is_some_and(|url| !probe(&url).ok) {
         Liveness::Unhealthy

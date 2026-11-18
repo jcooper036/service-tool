@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::cli::HealArgs;
 use crate::ctx::Ctx;
-use crate::output::print_json;
+use crate::output::{placement, print_json};
 use crate::{db, process, service};
 
 /// A service healed this many times in a row is given up on until it is restarted by hand.
@@ -47,8 +47,8 @@ pub fn run(ctx: &mut Ctx, args: HealArgs) -> Result<()> {
             match service::relaunch(ctx, &old, old.heal_count + 1, wait) {
                 Ok(session) => {
                     outcome.action = "healed";
-                    outcome.port = Some(session.port);
-                    outcome.detail = format!("now on http://localhost:{}", session.port);
+                    outcome.port = session.port;
+                    outcome.detail = format!("now {}", placement(&session));
                 }
                 Err(err) => {
                     outcome.action = "failed";

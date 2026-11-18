@@ -22,7 +22,10 @@ pub fn run(ctx: &Ctx, args: StopArgs) -> Result<()> {
     }
     for session in &sessions {
         service::stop(ctx, session)?;
-        println!("stopped {} (port {})", session.name, session.port);
+        match session.port {
+            Some(port) => println!("stopped {} (port {port})", session.name),
+            None => println!("stopped {} (worker)", session.name),
+        }
     }
     Ok(())
 }
